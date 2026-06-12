@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ja"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BLISS — 危機対応</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,400;0,700;0,900;1,400&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css"></head>
+<body><div class="shell" id="app"></div>
+<script src="api.js"></script><script src="app.js"></script>
+<script>
+(async () => {
+  const v = await mountShell({active:"trouble"});
+  const t = await API.trouble();
+  v.innerHTML = `
+    <div class="block"><div class="eyebrow">Crisis / トラブル対応マニュアル</div>
+      <div class="sec-title">危機対応 — その場で開く triage</div>
+      <p class="sec-note">2024年度 海外危機管理担当のマニュアルを構造化。属人化を防ぎ、誰でも同じ手順で初動できるようにしています。</p></div>
+
+    <div class="warnbar">${t.principle}</div>
+
+    <div class="ssi">
+      <div><div style="font-family:var(--f-mono);font-size:10px;letter-spacing:.1em;color:rgba(242,238,227,.7)">${t.ssi.name}</div>
+        <div class="ph">${t.ssi.phone}</div></div>
+      <div class="meta">${t.ssi.hours}<br>${t.ssi.how}<br><span style="color:#fff">${t.ssi.note}</span></div>
+    </div>
+
+    <div class="block">
+      <div class="eyebrow">状況別フロー</div>
+      <div class="trouble-grid">${t.situations.map(s=>`
+        <div class="situ"><h3>${s.title}</h3>
+          <ol>${s.steps.map(x=>`<li>${x}</li>`).join("")}</ol>
+          ${s.tip?`<div class="tip">${s.tip}</div>`:""}</div>`).join("")}</div>
+    </div>
+
+    <div class="split">
+      <div class="block">
+        <div class="eyebrow">重大度ケース分け（誰に報告するか）</div>
+        <div class="sev">${t.severity.map(s=>`
+          <div class="sevrow"><h4>${s.title}</h4>
+            <div class="r">報告：${s.report.join(" / ")}<br>収束：${s.resolve}</div></div>`).join("")}</div>
+      </div>
+      <div class="block">
+        <div class="eyebrow">内部トラブルの型</div>
+        <div class="panel"><div class="panel-b" style="font-size:12px;line-height:1.7">
+          <b style="font-family:var(--f-min)">宿泊先</b><ul style="margin:4px 0 12px 16px;color:var(--ink-soft)">${t.internal.accommodation.map(x=>`<li>${x}</li>`).join("")}</ul>
+          <b style="font-family:var(--f-min)">VISA</b><ul style="margin:4px 0 12px 16px;color:var(--ink-soft)">${t.internal.visa.map(x=>`<li>${x}</li>`).join("")}</ul>
+          <b style="font-family:var(--f-min)">その他</b><ul style="margin:4px 0 12px 16px;color:var(--ink-soft)">${t.internal.other.map(x=>`<li>${x}</li>`).join("")}</ul>
+          <div style="font-family:var(--f-mono);font-size:10.5px;color:var(--ink-mute);background:var(--paper-deep);padding:9px 12px">${t.internal.apip}</div>
+        </div></div>
+
+        <div class="block" style="margin-top:22px">
+          <div class="eyebrow">保護者対応（XD）</div>
+          <div class="panel"><div class="panel-b">${t.parents.map(p=>`
+            <div class="chk" style="cursor:default;flex-direction:column;align-items:flex-start;gap:3px">
+              <b style="font-family:var(--f-min);font-size:13px">${p.type}</b>
+              <span style="font-size:12px;color:var(--ink-soft)">${p.action}</span></div>`).join("")}</div></div>
+        </div>
+      </div>
+    </div>`;
+})();
+</script></body></html>

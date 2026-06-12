@@ -1,0 +1,8 @@
+node_modules/
+backend/bliss.db
+backend/bliss.db-wal
+backend/bliss.db-shm
+.env
+*.env
+.DS_Store
+.vscode/

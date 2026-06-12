@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ja"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BLISS — マッチング</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,400;0,700;0,900;1,400&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css"></head>
+<body><div class="shell" id="app"></div>
+<script src="api.js"></script><script src="app.js"></script>
+<script>
+(async () => {
+  const v = await mountShell({active:"match"});
+  let selected=null, eps=[], ops=[];
+  async function load(){ [eps,ops]=await Promise.all([API.eps(),API.ops()]); render(); }
+  function render(){
+    const unmatched=eps.filter(e=>!e.op_id && ["applied","accepted","approved"].includes(e.phase));
+    const matched=eps.filter(e=>e.op_id);
+    v.innerHTML=`
+      <div class="block"><div class="eyebrow">Layer 02 / Matching</div><div class="sec-title">マッチング</div>
+        <p class="sec-note">未マッチの渡航者に OP を割り当てます。左で EP を選び、右の OP で「ここにマッチ」を押すと確定し、フェーズが Accept に進みます。</p></div>
+      <div class="hint">${selected?`選択中: <b style="color:var(--ink)">${eps.find(e=>e.id===selected).name}</b> — 右の OP から割り当て先を選択`:`左の未マッチ EP を選択してください（${unmatched.length}名）`}</div>
+      <div class="board">
+        <div><div class="col-h"><span>未マッチ EP</span><span>${unmatched.length}</span></div>
+          ${unmatched.length?unmatched.map(e=>`<div class="mcard ${selected===e.id?'sel':''}" data-ep="${e.id}">
+            <div class="top"><div><div class="nm">${e.name}</div><div class="meta">${e.univ} · ${e.lc} · De担 ${e.de_tan}</div></div>${phaseChip(e.phase)}</div>
+            <div class="row"><span style="font-family:var(--f-mono);font-size:10px;color:var(--ink-mute)">確度</span>${lkBar(e.lk,e.lk<3)}
+              <a href="ep.html?id=${e.id}" style="margin-left:auto;font-family:var(--f-mono);font-size:11px;color:var(--aiesec)">詳細 →</a></div></div>`).join("")
+            :'<p style="font-family:var(--f-mono);font-size:11px;color:var(--ink-mute)">未マッチの EP はいません 🎉</p>'}
+          <div class="col-h" style="margin-top:28px"><span>マッチ済</span><span>${matched.length}</span></div>
+          ${matched.map(e=>`<div class="mcard" style="opacity:.92"><div class="top"><div><div class="nm">${e.name}</div><div class="meta">${e.univ} · ${e.lc}</div></div>${phaseChip(e.phase)}</div>
+            <div class="row"><span style="font-family:var(--f-min);font-size:13px">${e.opLabel}</span><a href="ep.html?id=${e.id}" style="margin-left:auto;font-family:var(--f-mono);font-size:11px;color:var(--aiesec)">詳細 →</a></div></div>`).join("")}
+        </div>
+        <div><div class="col-h"><span>公開中の OP</span><span>${ops.length}</span></div>
+          ${ops.map(o=>`<div class="mcard"><div class="top"><div><div class="nm">${o.flag} ${o.project}</div><div class="meta">${o.country} · ${o.org}</div></div>
+            <div style="font-family:var(--f-mono);font-size:10px;text-align:right;color:var(--ink-mute)">空き<br><b style="font-family:var(--f-disp);font-size:18px;color:var(--seal)">${o.slots}</b></div></div>
+            <div class="row"><span class="op-tag">${o.sdg}</span><span class="op-tag">締切 ${o.dl}</span>
+              <button class="btn pri sm" style="margin-left:auto" data-op="${o.id}" ${selected?'':'disabled'}>ここにマッチ</button></div></div>`).join("")}
+        </div></div>`;
+    $$('[data-ep]').forEach(c=>c.onclick=ev=>{ if(ev.target.closest("a"))return; selected=selected===c.dataset.ep?null:c.dataset.ep; render(); });
+    $$('[data-op]').forEach(b=>b.onclick=async()=>{ if(!selected)return;
+      const e=eps.find(x=>x.id===selected), o=ops.find(x=>x.id===b.dataset.op);
+      await API.match(selected,b.dataset.op); toast(`${e.name} → ${o.country} にマッチ`); selected=null; await load(); });
+  }
+  await load();
+})();
+</script></body></html>

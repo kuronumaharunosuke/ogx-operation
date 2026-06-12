@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="ja"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BLISS — 渡航者管理</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,400;0,700;0,900;1,400&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css"></head>
+<body><div class="shell" id="app"></div>
+<script src="api.js"></script><script src="app.js"></script>
+<script>
+(async () => {
+  const v = await mountShell({active:"ep"});
+  const eps = await API.eps();
+  v.innerHTML = `
+    <div class="block"><div class="eyebrow">Layer 02 / oGV · EP Management</div>
+      <div class="sec-title">渡航者 (EP) 管理</div>
+      <p class="sec-note">渡航者を EXPA マイルストーンで管理。行をクリックすると、その人の渡航オペレーション一式（運用シート・提出物・といちらん・資格審査）が開きます。</p></div>
+    <div class="toolbar">
+      <div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        <input id="q" placeholder="氏名・LC・渡航先で検索…"></div>
+      <button class="chip on" data-ph="all">すべて</button>
+      ${LIFECYCLE.map(p=>`<button class="chip" data-ph="${p}">${PHASE_LABEL[p][0]}</button>`).join("")}
+    </div>
+    <table class="tbl"><thead><tr><th>EP</th><th>LC</th><th>渡航先 / OP</th><th>De担 / EPM</th><th>フェーズ</th><th>運用進捗</th></tr></thead>
+    <tbody id="rows"></tbody></table>`;
+
+  let curPh="all";
+  function render(){
+    const qs=$("#q").value.toLowerCase(), rows=$("#rows"); rows.innerHTML="";
+    eps.filter(e=>(curPh==="all"||e.phase===curPh)&&((e.name+e.lc+(e.opLabel||"")).toLowerCase().includes(qs)))
+      .forEach(e=>{
+        const pct=e.progress.total?Math.round(e.progress.done/e.progress.total*100):0;
+        const tr=el("tr","clk",`
+          <td><div class="who"><b>${e.name}</b><em>${e.univ}</em></div></td>
+          <td><span class="lcbadge">${e.lc}</span></td>
+          <td><span style="font-family:var(--f-min);font-size:13px">${e.opLabel||'<span style="font-family:var(--f-mono);font-size:11px;color:var(--ink-mute)">未マッチ</span>'}</span></td>
+          <td style="font-family:var(--f-mono);font-size:11px;color:var(--ink-soft)">${e.de_tan}<br><span style="color:var(--ink-mute)">${e.epm}</span></td>
+          <td>${phaseChip(e.phase)}</td>
+          <td><div style="display:flex;align-items:center;gap:8px"><div class="progmini"><i style="width:${pct}%"></i></div><span style="font-family:var(--f-mono);font-size:10px;color:var(--ink-mute)">${e.progress.done}/${e.progress.total}</span></div></td>`);
+        tr.onclick=()=>location.href="ep.html?id="+e.id;
+        rows.appendChild(tr);
+      });
+    if(!rows.children.length) rows.innerHTML=`<tr><td colspan="6" style="text-align:center;color:var(--ink-mute);font-family:var(--f-mono);font-size:12px;padding:30px">該当する EP がいません</td></tr>`;
+  }
+  $("#q").oninput=render;
+  $$('.chip').forEach(c=>c.onclick=()=>{$$('.chip').forEach(x=>x.classList.remove("on"));c.classList.add("on");curPh=c.dataset.ph;render();});
+  render();
+})();
+</script></body></html>

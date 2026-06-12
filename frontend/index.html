@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ja"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BLISS — ダッシュボード</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,400;0,700;0,900;1,400&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css"></head>
+<body><div class="shell" id="app"></div>
+<script src="api.js"></script><script src="app.js"></script>
+<script>
+(async () => {
+  const v = await mountShell({active:"dash"});
+  const d = await API.dashboard();
+  $("#ribbon").innerHTML = `
+    <span>登録リード <b>${d.kpis.leads.toLocaleString()}</b></span>
+    <span>新歓CVR <b>${d.kpis.cvr}%</b> <em class="up">▲ ×4.1</em></span>
+    <span>Sign Up <b>${d.kpis.su}</b></span>
+    <span>稼働LC <b>${d.kpis.lcs} / 25</b></span>
+    <span>公開OP <b>${d.kpis.ops}</b></span>`;
+
+  const phaseCells = LIFECYCLE.map(p=>`<div class="lc-row"><span class="rk"></span><span class="nm">${phaseChip(p)}</span><span class="val"><b>${d.phaseCounts[p]||0}</b></span></div>`).join("");
+  v.innerHTML = `
+    <div class="block"><div class="eyebrow">Overview / 全国サマリー</div>
+      <div class="sec-title">2627 fruits — oGV オペレーション</div>
+      <p class="sec-note">新歓のリード獲得から渡航完了まで。下段の数字は接続中のデータベースから集計しています。</p></div>
+    <div class="block kpi-row">
+      <div class="kpi hero"><div class="lab">新歓 CVR</div><div class="num">${d.kpis.cvr}<small>%</small></div><div class="delta up">▲ 24.6pt 前年 7.8%</div></div>
+      <div class="kpi"><div class="lab">登録リード</div><div class="num">${d.kpis.leads.toLocaleString()}</div><div class="delta up">▲ +612 今週</div></div>
+      <div class="kpi"><div class="lab">Sign Up</div><div class="num">${d.kpis.su}</div><div class="delta up">▲ +28 今週</div></div>
+      <div class="kpi"><div class="lab">公開 OP</div><div class="num">${d.kpis.ops}</div><div class="delta flat">— 14ヶ国</div></div>
+    </div>
+    <div class="split">
+      <div class="block panel">
+        <div class="panel-h"><h3>全国ファネル</h3><span class="meta">fruits DashBoard 実測規模</span></div>
+        <div class="panel-b funnel">${d.nationalFunnel.map(([nm,ph,vv])=>{
+          const max=d.nationalFunnel[0][2]; const pct=Math.round(vv/max*100);
+          return `<div class="fstep"><div class="fn">${ph&&PHASE_LABEL[ph]?phaseChip(ph):''}<span>${nm}</span></div>
+          <div class="bar-track"><div class="bar-fill" data-w="${Math.max(pct,4)}" style="width:0">${vv.toLocaleString()}</div></div>
+          <div class="pct">${pct}%</div></div>`;}).join("")}</div>
+      </div>
+      <div class="block">
+        <div class="panel" style="margin-bottom:22px">
+          <div class="panel-h"><h3>DB内 渡航者の内訳</h3><span class="meta">phase別</span></div>
+          <div class="panel-b lc-rank">${phaseCells}</div>
+        </div>
+        <div class="note"><div class="seal">IM 査読</div>
+          <h4>運用シートが、動く</h4>
+          <p>これまで紙とGSSに散っていた SU〜Raise〜Accepted〜Approved〜Realize〜Fin の全工程を、EP単位でDBに載せた。Res/Sup・ダブルチェック・といちらん・資格審査まで1人の画面で追える。</p>
+          <p>各EPの「渡航オペレーション」を開くと、運用管理シートそのものがチェックリストとして並ぶ。</p>
+          <div class="sig">— 運営 / MC ODTM IM</div></div>
+      </div>
+    </div>
+    <div class="block"><div class="eyebrow">Quick access</div>
+      <div class="sec-title" style="margin-bottom:14px">よく使う動線</div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        <a class="btn pri" href="eps.html">渡航者を管理する →</a>
+        <a class="btn" href="matching.html">マッチングする →</a>
+        <a class="btn" href="ops.html">OPを探す →</a></div></div>`;
+  animateBars(v);
+})();
+</script></body></html>

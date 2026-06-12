@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="ja"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BLISS — 渡航オペレーション</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,400;0,700;0,900;1,400&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css"></head>
+<body><div class="shell" id="app"></div>
+<script src="api.js"></script><script src="app.js"></script>
+<script>
+(async () => {
+  const v = await mountShell({active:"ep", ribbon:false});
+  const id = new URLSearchParams(location.search).get("id") || "ep-001";
+  let ep, activeTab = "op";
+  const openBuckets = new Set();
+  const TABS = [["op","運用シート"],["tl","予定(逆算)"],["cop","Copilot"],["doc","提出物"],["toi","といちらん"],["log","連絡"],["audit","資格審査"]];
+  const STATUS_CYCLE = { "未":"進行中", "進行中":"完了", "完了":"未" };
+
+  async function load(){
+    ep = await API.ep(id);
+    if(ep.error){ v.innerHTML=`<p style="font-family:var(--f-mono);padding:40px">EPが見つかりません <a href="eps.html" style="color:var(--aiesec)">一覧へ</a></p>`; return; }
+    // 既定で現在bucketを開く
+    if(openBuckets.size===0){
+      const ci = LIFECYCLE.indexOf(ep.phase);
+      ep.buckets.forEach(b=>{ if(LIFECYCLE.indexOf(b.milestone) >= ci) openBuckets.add(b.id); });
+      if(openBuckets.size===0) openBuckets.add(ep.buckets[ep.buckets.length-1].id);
+    }
+    render();
+  }
+
+  function render(){
+    const op = ep.op, ci = LIFECYCLE.indexOf(ep.phase);
+    const next = ci < LIFECYCLE.length-1 ? PHASE_JP[LIFECYCLE[ci+1]] : null;
+    const pct = ep.progress.total ? Math.round(ep.progress.done/ep.progress.total*100) : 0;
+
+    v.innerHTML = `
+      <div class="crumb"><a href="eps.html">渡航者管理</a> <span>›</span> <b>${ep.name}</b></div>
+      <div class="dr-head">
+        <div>
+          <div class="nm">${ep.name}</div>
+          <div class="mt"><span class="lcbadge">${ep.lc} ${lcName(ep.lc)}</span> · ${ep.univ} · De担 ${ep.de_tan} · EPM ${ep.epm} · アプライ ${ep.applied}</div>
+          <div style="margin-top:12px">${phaseChip(ep.phase)} ${op?`<span style="font-family:var(--f-min);font-size:13px;margin-left:6px">${op.flag} ${op.country} / ${op.project} <span style="font-family:var(--f-mono);font-size:10px;color:var(--ink-mute)">@ ${op.org}</span></span>`:`<span style="font-family:var(--f-mono);font-size:11px;color:var(--ink-mute);margin-left:6px">未マッチ</span>`}</div>
+        </div>
+        <div class="rt">
+          <div style="font-family:var(--f-mono);font-size:10px;color:var(--ink-mute);text-align:right">確度<br>${lkBar(ep.lk,ep.lk<3)}</div>
+          ${next?`<button class="btn pri sm" id="adv">${next}へ進める →</button>`:`<span class="btn sm" style="cursor:default;opacity:.5">最終</span>`}
+          <a class="btn sm" href="me.html?id=${ep.id}" target="_blank">ユーザー画面で開く ↗</a>
+          ${!ep.op_id?`<a class="btn sm" href="matching.html">マッチング</a>`:""}
+        </div>
+      </div>
+      <div class="statbar">
+        <div class="c"><div class="k">渡航先</div><div class="v">${op?op.flag+" "+op.country:"—"}</div></div>
+        <div class="c"><div class="k">受入 LC</div><div class="v" style="font-size:12px">${op?op.org:"—"}</div></div>
+        <div class="c"><div class="k">運用進捗</div><div class="v">${ep.progress.done}/${ep.progress.total} <span style="font-family:var(--f-mono);font-size:11px;color:${pct===100?"var(--moss)":"var(--ochre)"}">(${pct}%)</span></div></div>
+        <div class="c"><div class="k">出発 / 帰国</div><div class="v" style="font-size:12px">${ep.departure_date?`${ep.departure_date}〜`:`<span style="color:var(--ink-mute);font-family:var(--f-mono);font-size:11px">未設定</span>`}</div></div>
+      </div>
+      <div class="block panel"><div class="panel-h"><h3>ライフサイクル</h3><span class="meta">EXPA マイルストーン</span></div>
+        <div class="panel-b"><div class="lifeline">${LIFECYCLE.map((p,i)=>`<div class="lf ${i<ci?"done":i===ci?"now":"future"}"><span class="dot"></span><span class="nm">${PHASE_JP[p]}</span></div>`).join("")}</div></div>
+      </div>
+      <div class="tabbar">${TABS.map(([t,l])=>{
+        const c = t==="op"?ep.buckets.reduce((a,b)=>a+b.tasks.length,0)
+          : t==="doc"?ep.docs.length : t==="toi"?ep.toiSections.reduce((a,s)=>a+s.fields.length,0)
+          : t==="log"?ep.messages.length : t==="audit"?ep.audit.length : "";
+        return `<button class="tab ${t===activeTab?"on":""}" data-tab="${t}">${l}${c!==""?`<span class="n">${c}</span>`:""}</button>`;}).join("")}</div>
+      <div id="tab"></div>`;
+
+    if($("#adv")) $("#adv").onclick=async()=>{ await API.advance(id); openBuckets.clear(); await load(); toast("フェーズを進めました"); window.scrollTo({top:0,behavior:"smooth"}); };
+    $$(".tab").forEach(b=>b.onclick=()=>{ activeTab=b.dataset.tab; render(); });
+    renderTab();
+  }
+
+  function renderTab(){
+    const t = $("#tab");
+    if(activeTab==="op") return renderOp(t);
+    if(activeTab==="tl") return renderTimeline(t);
+    if(activeTab==="cop") return renderCopilot(t);
+    if(activeTab==="doc") return renderDoc(t);
+    if(activeTab==="toi") return renderToi(t);
+    if(activeTab==="log") return renderLog(t);
+    if(activeTab==="audit") return renderAudit(t);
+  }
+
+  function renderOp(t){
+    t.innerHTML = ep.buckets.map(b=>{
+      const done = b.tasks.filter(x=>x.status==="完了").length;
+      const cur = LIFECYCLE.indexOf(b.milestone) >= LIFECYCLE.indexOf(ep.phase);
+      return `<div class="bucket ${openBuckets.has(b.id)?"open":""}" data-b="${b.id}">
+        <div class="bucket-h ${cur?'cur':''}" data-bh="${b.id}">
+          <h3>${b.label}<span class="ms">→ ${PHASE_JP[b.milestone]}</span></h3>
+          <span class="cnt">${done}/${b.tasks.length}</span>
+        </div>
+        <div class="bucket-b">${b.tasks.map(tk=>`
+          <div class="optask ${tk.status==='完了'?'done':tk.status==='進行中'?'prog':''}" data-task="${tk.id}">
+            <div class="st" data-st>${tk.status==='完了'?'✓':tk.status==='進行中'?'◐':''}</div>
+            <div><div class="tt" data-tt>${tk.title}</div>
+              ${tk.note?`<div class="nt">${tk.note}</div>`:''}
+              <div class="roles">
+                ${tk.res?`<span class="rolebadge res">Res ${tk.res}</span>`:''}
+                ${tk.sup?`<span class="rolebadge">Sup ${tk.sup}</span>`:''}
+                ${tk.dc?`<span class="rolebadge dc">ダブルチェック</span>`:''}
+              </div></div>
+            <div class="dead">${tk.dead||''}</div>
+          </div>`).join("")}</div>
+      </div>`;
+    }).join("");
+
+    $$("[data-bh]").forEach(h=>h.onclick=()=>{
+      const bid=h.dataset.bh; openBuckets.has(bid)?openBuckets.delete(bid):openBuckets.add(bid);
+      h.closest(".bucket").classList.toggle("open");
+    });
+    const cycle = async (row)=>{
+      const tid=row.dataset.task, cur=ep.buckets.flatMap(b=>b.tasks).find(x=>x.id===tid);
+      const nx=STATUS_CYCLE[cur.status];
+      await API.setTask(id,tid,nx); await load();
+    };
+    $$(".optask [data-st]").forEach(s=>s.onclick=()=>cycle(s.closest(".optask")));
+    $$(".optask [data-tt]").forEach(s=>s.onclick=()=>cycle(s.closest(".optask")));
+  }
+
+  function renderDoc(t){
+    const opts=["未提出","確認中","受領"];
+    t.innerHTML = `<div class="panel"><div class="panel-h"><h3>提出物 ダブルチェック</h3><span class="meta">資格審査対象</span></div>
+      <div class="panel-b">${ep.docs.map(d=>`
+        <div class="docrow" data-doc="${d.id}">
+          <div class="nm">${d.name} <span style="font-family:var(--f-mono);font-size:9px;color:var(--ink-mute)">${(PHASE_LABEL[ {su_raise:'signup',raise_accept:'accepted',accept_approve:'approved',approve_realize:'realized',fin:'finished'}[d.phase] ]||['',''])[0]||''}</span></div>
+          <select class="selstat" data-sel>${opts.map(o=>`<option ${o===d.status?'selected':''}>${o}</option>`).join("")}</select>
+          <button class="tog ${d.double_checked?'on':''}" data-dc>${d.double_checked?'✓ ダブチ済':'ダブチ'}</button>
+        </div>`).join("")}</div></div>`;
+    $$(".docrow").forEach(r=>{
+      const did=r.dataset.doc;
+      r.querySelector("[data-sel]").onchange=async e=>{ await API.setDoc(id,did,{status:e.target.value}); await load(); };
+      r.querySelector("[data-dc]").onclick=async()=>{ const d=ep.docs.find(x=>x.id===did); await API.setDoc(id,did,{doubleChecked:d.double_checked?0:1}); await load(); };
+    });
+  }
+
+  function renderToi(t){
+    t.innerHTML = `<p class="hint">渡航先情報収集一覧（といちらん）。EP個人情報を含むため閲覧権限は広げない運用。値を入力→フォーカスを外すと保存、右のボタンでダブルチェック状態を記録します。</p>`
+      + ep.toiSections.map(s=>`<div class="toi-sec"><h4>${s.section}</h4>${s.fields.map(f=>`
+        <div class="toirow" data-key="${f.key}">
+          <div class="lab">${f.label}<em>出典: ${f.source}</em></div>
+          <input value="${(f.value||'').replace(/"/g,'&quot;')}" placeholder="…" data-val>
+          <button class="tog ${f.double_checked?'on':''}" data-dc>${f.double_checked?'✓':'ダブチ'}</button>
+        </div>`).join("")}</div>`).join("");
+    $$(".toirow").forEach(r=>{
+      const key=r.dataset.key;
+      r.querySelector("[data-val]").onblur=async e=>{ await API.setToi(id,key,{value:e.target.value}); ep.toiSections.flatMap(s=>s.fields).find(f=>f.key===key).value=e.target.value; };
+      r.querySelector("[data-dc]").onclick=async()=>{ const f=ep.toiSections.flatMap(s=>s.fields).find(f=>f.key===key); await API.setToi(id,key,{doubleChecked:f.double_checked?0:1}); await load(); };
+    });
+  }
+
+  function renderLog(t){
+    const who={mentor:"De担",ep:ep.name,host:"受入LC",me:"あなた"};
+    const showCi = ep.phase==="realized"||ep.phase==="finished"||ep.checkins.length;
+    t.innerHTML = `<div class="ops-grid">
+      <div class="panel"><div class="panel-h"><h3>連絡ログ</h3><span class="meta">De担 · EP · 受入LC</span></div>
+        <div class="panel-b"><div class="log" id="log">${ep.messages.length?ep.messages.map(m=>`
+          <div class="msg ${m.sender==='me'||m.sender==='mentor'?'me':''}"><div class="meta"><b>${m.name}</b> · ${who[m.sender]||m.sender} · ${m.date}</div><div class="bub">${m.text}</div></div>`).join("")
+          :'<p style="font-family:var(--f-mono);font-size:11px;color:var(--ink-mute)">履歴なし</p>'}</div>
+          <div class="composer"><input id="msg" placeholder="メッセージ（De担として送信）"><button class="btn pri sm" id="send">送信</button></div></div></div>
+      <div>${showCi?`<div class="panel"><div class="panel-h"><h3>現地チェックイン</h3><span class="meta">週次安否確認</span></div>
+        <div class="panel-b" id="ci">${ep.checkins.length?ep.checkins.map(c=>`<div class="chk" style="cursor:default;flex-direction:column;align-items:flex-start;gap:4px"><div style="font-family:var(--f-mono);font-size:10px;color:var(--ink-mute)">${c.date} · ${c.title}</div><div style="font-size:12.5px">${c.note}</div></div>`).join("")
+          :'<p style="font-family:var(--f-mono);font-size:11px;color:var(--ink-mute);margin-bottom:10px">未記録</p>'}
+          <div class="composer"><input id="cin" placeholder="今週の安否確認を記録…"><button class="btn pri sm" id="cibtn">記録</button></div></div></div>`:''}
+      </div></div>`;
+    const send=async()=>{const x=$("#msg").value.trim();if(!x)return; await API.addMessage(id,x); await load(); activeTab="log"; setTimeout(()=>{const l=$("#log");if(l)l.scrollTop=l.scrollHeight;},30);};
+    $("#send").onclick=send; $("#msg").onkeydown=e=>{if(e.key==="Enter")send();};
+    if($("#cibtn")){ const ci=async()=>{const x=$("#cin").value.trim();if(!x)return; await API.addCheckin(id,x); await load(); toast("チェックインを記録");}; $("#cibtn").onclick=ci; $("#cin").onkeydown=e=>{if(e.key==="Enter")ci();}; }
+  }
+
+  function renderAudit(t){
+    const cycle={"未判定":"合","合":"否","否":"対象外","対象外":"未判定"};
+    const cls=r=>r==="合"?"go":r==="否"?"no":"na";
+    t.innerHTML = `<div class="panel"><div class="panel-h"><h3>資格審査項目 (PHI)</h3><span class="meta">Healthier · Safety</span></div>
+      <div class="panel-b"><table class="audit-tbl"><tbody>${ep.audit.map(a=>`
+        <tr data-a="${a.id}">
+          <td style="width:70px"><span class="areatag">${a.area}</span></td>
+          <td><div class="ind">${a.indicator}</div><div class="ms">${a.measurement}</div></td>
+          <td style="width:120px;font-family:var(--f-mono);font-size:10px;color:var(--ink-mute)">基準 ${a.pass}<br>配点 ${a.weight}</td>
+          <td style="width:88px;text-align:right"><button class="res-pill ${cls(a.result)}" data-res>${a.result}</button></td>
+        </tr>`).join("")}</tbody></table>
+        <p class="sec-note" style="margin-top:12px">※ クリックで判定を循環（未判定→合→否→対象外）。実運用では監査スパン（半期）で MC が確定。</p></div></div>`;
+    $$("[data-res]").forEach(b=>b.onclick=async()=>{
+      const aid=b.closest("tr").dataset.a, cur=ep.audit.find(x=>x.id===aid);
+      cur.result=cycle[cur.result];
+      await API.setAudit(id,aid,cur.result);
+      b.textContent=cur.result; b.className="res-pill "+cls(cur.result);
+    });
+  }
+
+  async function renderTimeline(t){
+    t.innerHTML = `<p class="hint">出発日・帰国日を入れると全工程の期限を逆算します（運用シート/2APDの逆算ルール）。</p>
+      <div class="dateset">
+        <div><label>出発日</label><input type="date" id="dep" value="${ep.departure_date||""}"></div>
+        <div><label>帰国日</label><input type="date" id="ret" value="${ep.return_date||""}"></div>
+        <button class="btn pri sm" id="recalc">逆算する</button>
+      </div>
+      <div id="tlbody" style="font-family:var(--f-mono);font-size:12px;color:var(--ink-mute)">読み込み中…</div>`;
+    $("#recalc").onclick=async()=>{
+      await API.setDates(id, $("#dep").value||null, $("#ret").value||null);
+      ep.departure_date=$("#dep").value||null; ep.return_date=$("#ret").value||null;
+      drawTl();
+    };
+    drawTl();
+    async function drawTl(){
+      const tl = await API.timeline(id);
+      if(!tl.departure && !tl.return){ $("#tlbody").innerHTML=`<div class="warnbar">出発日・帰国日が未設定です。日付を入れて「逆算する」を押してください。</div>`; return; }
+      const pillJp={done:"完了",overdue:"期限超過",soon:"まもなく",upcoming:"予定",nodate:"日付なし",scheduled:"予定"};
+      $("#tlbody").innerHTML = `<div class="tl">${tl.milestones.map(m=>`
+        <div class="tlrow ${m.state}">
+          <div class="d">${m.date||"—"}</div>
+          <div class="lb">${m.label}${m.note?`<em>${m.note}</em>`:""}</div>
+          <div class="tlpill ${m.state}">${pillJp[m.state]||m.state}${m.daysFromToday!=null&&m.state!=="done"?`・${m.daysFromToday>=0?"あと"+m.daysFromToday+"日":Math.abs(m.daysFromToday)+"日超過"}`:""}</div>
+        </div>`).join("")}</div>
+        ${tl.floating.length?`<div style="margin-top:18px"><div class="eyebrow">固定期限なし（早めに）</div>${tl.floating.map(f=>`<div class="actrow"><span class="lvl normal">${f.status}</span><div><b style="font-family:var(--f-min)">${f.label}</b><br><span style="font-family:var(--f-mono);font-size:10px;color:var(--ink-mute)">${f.note}</span></div></div>`).join("")}</div>`:""}`;
+    }
+  }
+
+  async function renderCopilot(t){
+    t.innerHTML = `<div style="font-family:var(--f-mono);font-size:12px;color:var(--ink-mute)">Copilot 集計中…</div>`;
+    const [data, st] = await Promise.all([API.next(id), API.copilotStatus()]);
+    const lvlJp={urgent:"至急",soon:"間近",normal:"通常"};
+    t.innerHTML = `
+      <p class="hint">属人化を防ぐための「次にやること」と定型文面を、運用ルールから自動生成します。${st.ai?'<b style="color:var(--moss)">AI応答 有効</b>':'<span style="color:var(--ochre)">AI未接続（ルールエンジンで動作中）</span>'}</p>
+      <div class="eyebrow">次にやること</div>
+      <div class="cop-actions">${data.actions.length?data.actions.map(a=>`
+        <div class="actrow"><span class="lvl ${a.level}">${lvlJp[a.level]||a.level}</span><div>${a.text}</div></div>`).join("")
+        :`<div class="actrow"><span class="lvl normal">OK</span><div>直近の期限超過・要対応はありません。</div></div>`}</div>
+      ${data.drafts.length?`<div class="eyebrow">ドラフト文面（コピーして使用）</div>
+        ${data.drafts.map((d,i)=>`<div class="draft"><div class="draft-h"><div class="t">${d.title}</div><button class="btn sm" data-copy="${i}">コピー</button></div><pre id="draft${i}">${d.body}</pre></div>`).join("")}`:""}
+      <div class="eyebrow" style="margin-top:8px">質問する</div>
+      <div class="askbox"><input id="q" placeholder="例：この子のフライト、今やるべきことは？"><button class="btn pri sm" id="ask">送信</button></div>
+      <div id="ans"></div>`;
+    $$('[data-copy]').forEach(b=>b.onclick=()=>{const d=data.drafts[+b.dataset.copy];navigator.clipboard?.writeText(d.title+"\n\n"+d.body);toast("コピーしました");});
+    const ask=async()=>{
+      const qv=$("#q").value.trim(); if(!qv)return;
+      $("#ans").innerHTML=`<div class="ai-off">問い合わせ中…</div>`;
+      const r=await API.copilot(id,qv);
+      if(r.ai&&r.aiText) $("#ans").innerHTML=`<div class="ai-ans">${r.aiText.replace(/</g,"&lt;")}</div>`;
+      else if(r.aiError) $("#ans").innerHTML=`<div class="ai-off">AIエラー：${r.aiError.slice(0,120)}<br>ルールエンジンの「次にやること」を参照してください。</div>`;
+      else $("#ans").innerHTML=`<div class="ai-off">AI未接続です。サーバ環境変数 ANTHROPIC_API_KEY を設定すると自然言語で回答します。上の「次にやること」はルールエンジンが常に算出しています。</div>`;
+    };
+    $("#ask").onclick=ask; $("#q").onkeydown=e=>{if(e.key==="Enter")ask();};
+  }
+
+  await load();
+})();
+</script></body></html>

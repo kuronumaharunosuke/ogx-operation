@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="ja"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BLISS — c2c</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,400;0,700;0,900;1,400&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css"></head>
+<body><div class="shell" id="app"></div>
+<script src="api.js"></script><script src="app.js"></script>
+<script>
+(async () => {
+  const v = await mountShell({active:"c2c"});
+  const feed = [
+    ["FEATURE · 渡航体験","Kathmandu の global classroom で気づいた『教える』の前にあること","最初の1週間、私は何も教えられなかった。言葉も文化も子どもたちの今日の機嫌も、全部わからない。そこから始まった6週間の話。","TK","高橋 健太","KT · 2627 oGV","feat"],
+    ["OP 解説","Ghana KNUST の equify って実際どう？","受入LCのメンターに、現地の生活・安全・プロジェクト内容を直接聞いた。物価感や週末の過ごし方まで。","IS","伊藤 さくら","APU · OGX",""],
+    ["ALUMNI","帰国してからの方が長い、という話","渡航は6週間。でも『あの経験をどう使うか』は人生ぜんぶ続く。アフターグローの設計を任された理由。","UT","運営 太郎","HI · IM",""],
+    ["新歓 · はじめてのGV","『海外ボランティア』に身構えていた自分へ","ハードルが高そうに見えるだけで、最初の一歩は説明会に来ること。先輩たちもみんなそうだった。","KA","加藤 彩","APU · 1年",""],
+  ];
+  v.innerHTML = `
+    <div class="block"><div class="eyebrow">Layer 03 / connect-to-connect</div>
+      <div class="sec-title">c2c — 体験とコンテンツ</div>
+      <p class="sec-note">渡航 OB/OG の体験談や案件記事を発見する層。新歓のリードがここで「自分ごと化」する。</p></div>
+    <div class="feed">${feed.map(([tag,title,body,av,by,role,feat])=>`
+      <div class="card ${feat?'card-feat':''}">
+        <div class="card-tag">${tag}</div>
+        <div class="card-body"><h4>${title}</h4><p>${body}</p></div>
+        <div class="card-by"><span class="av">${av}</span><div><b>${by}</b> <em>${role}</em></div></div></div>`).join("")}</div>`;
+})();
+</script></body></html>

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ja"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BLISS — OP検索</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,400;0,700;0,900;1,400&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css"></head>
+<body><div class="shell" id="app"></div>
+<script src="api.js"></script><script src="app.js"></script>
+<script>
+(async () => {
+  const v = await mountShell({active:"op"});
+  const ops = await API.ops();
+  v.innerHTML = `
+    <div class="block"><div class="eyebrow">Layer 02 / Opportunity</div>
+      <div class="sec-title">OP 検索</div>
+      <p class="sec-note">海外 LC が公開する Global Volunteer の案件。希望渡航先フォーム（oGV Tracker）の EY×PJT を反映。地域で絞り込み、マッチングに渡します。</p></div>
+    <div class="toolbar">
+      <div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        <input id="q" placeholder="国・PJT・受入LCで検索…"></div>
+      <button class="chip on" data-rg="all">全地域</button>
+      <button class="chip" data-rg="asia">アジア</button>
+      <button class="chip" data-rg="africa">アフリカ</button>
+      <button class="chip" data-rg="latam">中南米</button>
+      <button class="chip" data-rg="europe">欧州</button>
+    </div>
+    <div class="op-grid" id="grid"></div>`;
+  let rg="all";
+  function render(){
+    const qs=$("#q").value.toLowerCase();
+    $("#grid").innerHTML = ops.filter(o=>(rg==="all"||o.region===rg)&&((o.country+o.project+o.org).toLowerCase().includes(qs)))
+      .map(o=>`<div class="op">
+        <div class="op-top"><span class="op-flag">${o.flag}</span><div class="op-slots">空き<b>${o.slots}</b>枠</div></div>
+        <div class="op-b"><div class="op-role">${o.project}</div><div class="op-org">${o.country} · ${o.org}</div>
+          <div class="op-tags"><span class="op-tag">${o.sdg}</span><span class="op-tag">${o.region}</span></div></div>
+        <div class="op-f"><span>受入 LC 公開</span><span class="dl">締切 ${o.dl}</span></div></div>`).join("")
+      || `<p style="font-family:var(--f-mono);font-size:12px;color:var(--ink-mute);grid-column:1/-1;text-align:center;padding:30px">該当する OP がありません</p>`;
+  }
+  $("#q").oninput=render;
+  $$('.chip').forEach(c=>c.onclick=()=>{$$('.chip').forEach(x=>x.classList.remove("on"));c.classList.add("on");rg=c.dataset.rg;render();});
+  render();
+})();
+</script></body></html>

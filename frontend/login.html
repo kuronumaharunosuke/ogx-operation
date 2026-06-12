@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="ja"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BLISS — ログイン</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,400;0,700;0,900;1,400&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css"></head>
+<body>
+<div class="login-wrap" id="app">
+  <div class="login-mast">BL<i>I</i>SS</div>
+  <div class="login-sub">AIESEC Japan oGV 統合プラットフォーム</div>
+  <div class="login-issue">ISSUE 26.27 — 入る画面を選んでください</div>
+  <div class="role-cards">
+    <div class="role" id="adminCard">
+      <span class="ic"><svg viewBox="0 0 24 24"><path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6l8-4z"/><path d="M9 12l2 2 4-4"/></svg></span>
+      <h2>管理者として入る</h2>
+      <p>MC / De担 / EPM 向け。全EPの運用シート・マッチング・Copilot・資格審査・ダブルチェックを管理します。</p>
+      <span class="who">MC · De担 · EPM · XD</span>
+      <button class="btn pri go" onclick="location.href='index.html'">管理者コンソールへ →</button>
+    </div>
+    <div class="role" id="epCard">
+      <span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 016-6h4a6 6 0 016 6v1"/></svg></span>
+      <h2>EP（渡航者）として入る</h2>
+      <p>自分の渡航準備を進める画面。マイタスク・提出物・といちらん記入・予定・連絡が使えます。</p>
+      <select id="epSel"><option value="">— 自分の名前を選択 —</option></select>
+      <button class="btn pri go" id="epGo" disabled>マイポータルへ →</button>
+    </div>
+  </div>
+  <div class="login-note">※ これはプロトタイプのため認証は簡易です。本番では Firebase Auth を @aiesec.jp 限定にし、EPは自分のレコードのみ閲覧、といちらん（個人情報）は担当者のみアクセスに制限します。</div>
+</div>
+<script src="api.js"></script><script src="app.js"></script>
+<script>
+(async () => {
+  const eps = await API.eps();
+  const sel = document.getElementById("epSel");
+  eps.forEach(e => { const o=document.createElement("option"); o.value=e.id; o.textContent=`${e.name}（${e.lc}・${e.univ}）`; sel.appendChild(o); });
+  const go = document.getElementById("epGo");
+  sel.onchange = () => { go.disabled = !sel.value; };
+  go.onclick = () => { if(sel.value) location.href = "me.html?id="+sel.value; };
+})();
+</script>
+</body></html>
