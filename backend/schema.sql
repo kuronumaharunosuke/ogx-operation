@@ -24,7 +24,8 @@ CREATE TABLE IF NOT EXISTS eps (
   applied TEXT,
   lk INTEGER DEFAULT 3,
   departure_date TEXT,
-  return_date TEXT
+  return_date TEXT,
+  note TEXT
 );
 
 CREATE TABLE IF NOT EXISTS op_template (

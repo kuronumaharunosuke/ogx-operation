@@ -25,6 +25,7 @@ const API = {
   // timeline & copilot
   timeline(id){ return jget(`/api/eps/${id}/timeline`); },
   setDates(id,departure,ret){ return jsend(`/api/eps/${id}/dates`,"POST",{departure,return:ret}); },
+  setSchedule(id,payload){ return jsend(`/api/eps/${id}/dates`,"POST",payload); },
   next(id){ return jget(`/api/eps/${id}/next`); },
   trouble(){ return jget(`/api/trouble`); },
   copilotStatus(){ return jget(`/api/copilot/status`); },

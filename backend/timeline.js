@@ -73,4 +73,27 @@ function computeTimeline(ep, taskStatus = {}) {
   };
 }
 
-module.exports = { computeTimeline, MILESTONES, FLOATING, parse, fmt, addDays, todayUTC, diffDays };
+// ---- 研修日程ベースの変換 ----
+// 研修初日〜研修最終日 = 42日間（研修最終日 = 研修初日+41）
+// 出発日 = 研修初日-2 / 帰国日 = 研修最終日+1（= 研修初日+42）
+const TRAINING_DAYS = 42;
+
+function trainingToTravel(startStr) {
+  const S = parse(startStr); if (!S) return null;
+  const end = addDays(S, TRAINING_DAYS - 1);
+  return { start: fmt(S), end: fmt(end), departure: fmt(addDays(S, -2)), return: fmt(addDays(end, 1)) };
+}
+// 出発日 から研修日程を逆算（出発日 = 研修初日-2 の前提）
+function trainingFromDeparture(depStr) {
+  const d = parse(depStr); if (!d) return null;
+  const S = addDays(d, 2);
+  return { start: fmt(S), end: fmt(addDays(S, TRAINING_DAYS - 1)) };
+}
+// 備考の自動文面
+function travelNote(depStr, retStr) {
+  const t = trainingFromDeparture(depStr); if (!t) return null;
+  return `研修 ${t.start}〜${t.end}（${TRAINING_DAYS}日間）｜出発 ${depStr}・帰国 ${retStr || ""}`.trim();
+}
+
+module.exports = { computeTimeline, MILESTONES, FLOATING, parse, fmt, addDays, todayUTC, diffDays,
+  TRAINING_DAYS, trainingToTravel, trainingFromDeparture, travelNote };

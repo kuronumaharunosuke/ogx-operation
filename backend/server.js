@@ -3,7 +3,7 @@ const express = require("express");
 const path = require("path");
 const { query, init } = require("./db");
 const D = require("./seed-data");
-const { computeTimeline } = require("./timeline");
+const { computeTimeline, trainingToTravel, travelNote } = require("./timeline");
 const { nextActions } = require("./copilot");
 const trouble = require("./trouble");
 const ai = require("./ai");
@@ -257,11 +257,20 @@ app.post("/api/eps/:id/checkins", h(async (req, res) => {
 
 // ---- dates ----
 app.post("/api/eps/:id/dates", h(async (req, res) => {
-  const cur = await q1("SELECT departure_date, return_date FROM eps WHERE id=?", req.params.id) || {};
-  const dep = req.body.departure ?? cur.departure_date ?? null;
-  const ret = req.body.return ?? cur.return_date ?? null;
-  await run("UPDATE eps SET departure_date=?, return_date=? WHERE id=?", dep, ret, req.params.id);
-  res.json({ ok: true, departure: dep, return: ret });
+  const cur = await q1("SELECT departure_date, return_date, note FROM eps WHERE id=?", req.params.id) || {};
+  let dep, ret;
+  if (req.body.training_start) {            // 研修初日から出発/帰国を自動算出
+    const t = trainingToTravel(req.body.training_start);
+    dep = t.departure; ret = t.return;
+  } else {
+    dep = req.body.departure ?? cur.departure_date ?? null;
+    ret = req.body.return ?? cur.return_date ?? null;
+  }
+  // 備考：明示があればそれ、無ければ研修日程から自動生成（dep がある時）
+  const note = (req.body.note !== undefined) ? req.body.note
+    : (dep ? travelNote(dep, ret) : (cur.note ?? null));
+  await run("UPDATE eps SET departure_date=?, return_date=?, note=? WHERE id=?", dep, ret, note, req.params.id);
+  res.json({ ok: true, departure: dep, return: ret, note });
 }));
 
 // ---- timeline ----
@@ -311,17 +320,19 @@ app.post("/api/eps", h(async (req, res) => {
   if (!b.name) return res.status(400).json({ error: "name required" });
   const id = b.id || await nextEpId();
   const phase = b.phase || "signup";
-  await run(`INSERT INTO eps(id,name,univ,lc,phase,op_id,de_tan,epm,applied,lk,departure_date,return_date)
-             VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
+  let dep = b.departure_date || null, ret = b.return_date || null;
+  if (b.training_start) { const t = trainingToTravel(b.training_start); dep = t.departure; ret = t.return; }
+  const note = b.note ?? (dep ? travelNote(dep, ret) : null);
+  await run(`INSERT INTO eps(id,name,univ,lc,phase,op_id,de_tan,epm,applied,lk,departure_date,return_date,note)
+             VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     id, b.name, b.univ || null, b.lc || null, phase, b.op_id || null,
-    b.de_tan || null, b.epm || null, b.applied || today(), b.lk || 3,
-    b.departure_date || null, b.return_date || null);
+    b.de_tan || null, b.epm || null, b.applied || today(), b.lk || 3, dep, ret, note);
   await initEpChildren(id, phase);
   res.json({ ok: true, id });
 }));
 
 app.patch("/api/eps/:id", h(async (req, res) => {
-  const fields = ["name","univ","lc","de_tan","epm","phase","op_id","lk","departure_date","return_date"];
+  const fields = ["name","univ","lc","de_tan","epm","phase","op_id","lk","departure_date","return_date","note"];
   const sets = [], vals = [];
   for (const f of fields) if (f in (req.body || {})) { sets.push(`${f}=?`); vals.push(req.body[f]); }
   if (!sets.length) return res.json({ ok: true });
@@ -386,20 +397,21 @@ app.get("*", (_req, res) => res.sendFile(path.join(__dirname, "..", "frontend", 
 
 const PORT = process.env.PORT || 3000;
 
-// 起動：テーブル作成 → 空なら自動シード → listen
+// 起動：テーブル作成 → 空なら自動シード → LC名を正規化 → listen
 (async () => {
   try {
     await init();
-    // LC名は毎回正規化（既存DBでもEPを消さずに名称だけ更新）
-    for (const [code, name] of D.LCS)
-      await run(`INSERT INTO lcs(code,name) VALUES(?,?)
-                 ON CONFLICT (code) DO UPDATE SET name=excluded.name`, code, name);
+    await run("ALTER TABLE eps ADD COLUMN IF NOT EXISTS note TEXT");  // 備考（既存DBにも追加）
     const n = (await query("SELECT COUNT(*)::int c FROM eps")).rows[0].c;
     if (n === 0) {
       const { runSeed } = require("./seed");
       const r = await runSeed(false);
       console.log("DBが空だったので初期データを投入:", r.eps, "EPs");
     }
+    // LC名は毎回正規化（既存DBでもEPを消さず名称だけ更新。seedの後なので重複しない）
+    for (const [code, name] of D.LCS)
+      await run(`INSERT INTO lcs(code,name) VALUES(?,?)
+                 ON CONFLICT (code) DO UPDATE SET name=excluded.name`, code, name);
   } catch (e) { console.error("DB init/seed error:", e.message); }
   app.listen(PORT, () => console.log(`BLISS → http://localhost:${PORT}`));
 })();

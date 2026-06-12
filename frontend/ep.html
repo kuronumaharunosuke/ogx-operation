@@ -53,8 +53,9 @@
         <div class="c"><div class="k">渡航先</div><div class="v">${op?op.flag+" "+op.country:"—"}</div></div>
         <div class="c"><div class="k">受入 LC</div><div class="v" style="font-size:12px">${op?op.org:"—"}</div></div>
         <div class="c"><div class="k">運用進捗</div><div class="v">${ep.progress.done}/${ep.progress.total} <span style="font-family:var(--f-mono);font-size:11px;color:${pct===100?"var(--moss)":"var(--ochre)"}">(${pct}%)</span></div></div>
-        <div class="c"><div class="k">出発 / 帰国</div><div class="v" style="font-size:12px">${ep.departure_date?`${ep.departure_date}〜`:`<span style="color:var(--ink-mute);font-family:var(--f-mono);font-size:11px">未設定</span>`}</div></div>
+        <div class="c"><div class="k">出発 / 帰国</div><div class="v" style="font-size:12px">${ep.departure_date?`${ep.departure_date}${ep.return_date?" 〜 "+ep.return_date:"〜"}`:`<span style="color:var(--ink-mute);font-family:var(--f-mono);font-size:11px">未設定</span>`}</div></div>
       </div>
+      ${ep.note?`<div style="background:var(--paper-raised);border:1px solid var(--rule);border-left:3px solid var(--aiesec);border-radius:var(--r-sm);padding:10px 14px;margin-bottom:22px;font-size:12.5px;color:var(--ink-soft)"><b style="color:var(--ink);font-weight:700">備考</b>　${ep.note}</div>`:""}
       <div class="block panel"><div class="panel-h"><h3>ライフサイクル</h3><span class="meta">EXPA マイルストーン</span></div>
         <div class="panel-b"><div class="lifeline">${LIFECYCLE.map((p,i)=>`<div class="lf ${i<ci?"done":i===ci?"now":"future"}"><span class="dot"></span><span class="nm">${PHASE_JP[p]}</span></div>`).join("")}</div></div>
       </div>
@@ -217,17 +218,45 @@
   }
 
   async function renderTimeline(t){
-    t.innerHTML = `<p class="hint">出発日・帰国日を入れると全工程の期限を逆算します（運用シート/2APDの逆算ルール）。</p>
-      <div class="dateset">
-        <div><label>出発日</label><input type="date" id="dep" value="${ep.departure_date||""}"></div>
-        <div><label>帰国日</label><input type="date" id="ret" value="${ep.return_date||""}"></div>
-        <button class="btn pri sm" id="recalc">逆算する</button>
+    // 研修初日 → 研修最終日/出発/帰国
+    const td = s => {
+      if(!s) return null;
+      const [y,m,d]=s.split("-").map(Number);
+      const S=new Date(Date.UTC(y,m-1,d)), add=(dt,n)=>{const x=new Date(dt);x.setUTCDate(x.getUTCDate()+n);return x;}, f=x=>x.toISOString().slice(0,10);
+      const end=add(S,41);
+      return {start:f(S), end:f(end), dep:f(add(S,-2)), ret:f(add(end,1))};
+    };
+    const autoNote = o => `研修 ${o.start}〜${o.end}（42日間）｜出発 ${o.dep}・帰国 ${o.ret}`;
+    // 出発日が入っていれば研修初日=出発+2 を逆算してプリフィル
+    let pre="";
+    if(ep.departure_date){ const [y,m,d]=ep.departure_date.split("-").map(Number); const dt=new Date(Date.UTC(y,m-1,d)); dt.setUTCDate(dt.getUTCDate()+2); pre=dt.toISOString().slice(0,10); }
+
+    t.innerHTML = `<p class="hint">研修初日を入れると、<b>研修42日間</b>／<b>出発＝研修2日前</b>／<b>帰国＝研修最終日翌日</b>を自動計算し、全工程の期限を逆算します。</p>
+      <div class="dateset" style="flex-wrap:wrap;gap:18px">
+        <div><label>研修初日</label><input type="date" id="tstart" value="${pre}"></div>
+        <div id="derived" style="font-size:12.5px;color:var(--ink-soft);align-self:flex-end;padding-bottom:8px"></div>
+        <button class="btn pri sm" id="recalc" style="align-self:flex-end">設定して逆算</button>
       </div>
-      <div id="tlbody" style="font-family:var(--f-mono);font-size:12px;color:var(--ink-mute)">読み込み中…</div>`;
+      <div style="margin-bottom:18px"><label style="font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-mute);font-weight:500;display:block;margin-bottom:5px">備考</label>
+        <textarea id="note" rows="2" style="width:100%;border:1px solid var(--rule-2);background:var(--paper-raised);padding:9px 11px;font-size:13px;border-radius:var(--r-sm);resize:vertical;font-family:var(--f-body)">${(ep.note||"").replace(/</g,"&lt;")}</textarea></div>
+      <div id="tlbody" style="font-size:12px;color:var(--ink-mute)">読み込み中…</div>`;
+
+    let lastAuto = ep.note || "";
+    function preview(){
+      const o=td($("#tstart").value);
+      if(!o){ $("#derived").innerHTML=""; return; }
+      $("#derived").innerHTML=`研修 <b>${o.start}〜${o.end}</b>（42日）／出発 <b>${o.dep}</b>・帰国 <b>${o.ret}</b>`;
+      const note=$("#note");
+      if(!note.value || note.value===lastAuto){ note.value=autoNote(o); lastAuto=note.value; }
+    }
+    $("#tstart").oninput=preview; preview();
+
     $("#recalc").onclick=async()=>{
-      await API.setDates(id, $("#dep").value||null, $("#ret").value||null);
-      ep.departure_date=$("#dep").value||null; ep.return_date=$("#ret").value||null;
-      drawTl();
+      const s=$("#tstart").value||null;
+      await API.setSchedule(id, { training_start:s, note:$("#note").value||null });
+      const o=s?td(s):null;
+      ep.departure_date=o?o.dep:ep.departure_date; ep.return_date=o?o.ret:ep.return_date; ep.note=$("#note").value||null;
+      toast("研修日程を設定しました"); drawTl();
     };
     drawTl();
     async function drawTl(){

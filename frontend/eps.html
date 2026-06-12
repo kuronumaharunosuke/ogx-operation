@@ -61,8 +61,8 @@
         <div><label>De担</label><input id="f_de" placeholder="運営 太郎"></div>
         <div><label>EPM</label><input id="f_epm" placeholder="—"></div>
         <div><label>フェーズ</label><select id="f_phase">${phOpts}</select></div>
-        <div><label>出発日</label><input id="f_dep" type="date"></div>
-        <div><label>帰国日</label><input id="f_ret" type="date"></div>
+        <div><label>研修初日</label><input id="f_tstart" type="date"></div>
+        <div class="full"><label>備考（研修日程は自動で入ります）</label><input id="f_note" placeholder="研修初日を入れると自動生成"></div>
       </div>
       <div class="frm-actions"><button class="btn" id="f_cancel">キャンセル</button><button class="addbtn" id="f_save">作成</button></div>
       </div></div>`;
@@ -70,13 +70,22 @@
     const close = () => bg.remove();
     bg.querySelector(".x").onclick = close; bg.querySelector("#f_cancel").onclick = close;
     bg.onclick = e => { if(e.target===bg) close(); };
+    let lastAuto="";
+    bg.querySelector("#f_tstart").oninput = e => {
+      const s=e.target.value; const note=bg.querySelector("#f_note");
+      if(!s) return;
+      const [y,m,d]=s.split("-").map(Number); const S=new Date(Date.UTC(y,m-1,d));
+      const add=(dt,n)=>{const x=new Date(dt);x.setUTCDate(x.getUTCDate()+n);return x;}, f=x=>x.toISOString().slice(0,10);
+      const end=add(S,41), auto=`研修 ${f(S)}〜${f(end)}（42日間）｜出発 ${f(add(S,-2))}・帰国 ${f(add(end,1))}`;
+      if(!note.value||note.value===lastAuto){ note.value=auto; lastAuto=auto; }
+    };
     bg.querySelector("#f_save").onclick = async () => {
       const name = $("#f_name").value.trim();
       if(!name){ $("#f_name").focus(); return; }
       await API.createEp({
         name, univ:$("#f_univ").value.trim(), lc:$("#f_lc").value,
         de_tan:$("#f_de").value.trim(), epm:$("#f_epm").value.trim(),
-        phase:$("#f_phase").value, departure_date:$("#f_dep").value||null, return_date:$("#f_ret").value||null,
+        phase:$("#f_phase").value, training_start:$("#f_tstart").value||null, note:$("#f_note").value||null,
       });
       close(); toast("EPを追加しました"); reload();
     };
