@@ -46,6 +46,7 @@
           ${next?`<button class="btn pri sm" id="adv">${next}へ進める →</button>`:`<span class="btn sm" style="cursor:default;opacity:.5">最終</span>`}
           <a class="btn sm" href="me.html?id=${ep.id}" target="_blank">ユーザー画面で開く ↗</a>
           ${!ep.op_id?`<a class="btn sm" href="matching.html">マッチング</a>`:""}
+          <span style="display:flex;gap:8px"><button class="btn sm" id="editEp">編集</button><button class="dangerbtn" id="delEp">削除</button></span>
         </div>
       </div>
       <div class="statbar">
@@ -65,6 +66,34 @@
       <div id="tab"></div>`;
 
     if($("#adv")) $("#adv").onclick=async()=>{ await API.advance(id); openBuckets.clear(); await load(); toast("フェーズを進めました"); window.scrollTo({top:0,behavior:"smooth"}); };
+
+    $("#delEp").onclick = async () => {
+      if(!confirm(`${ep.name} を削除しますか？（タスク・提出物・といちらん・連絡も全部消えます）`)) return;
+      await API.deleteEp(id); location.href = "eps.html";
+    };
+    $("#editEp").onclick = () => {
+      const lcOpts = META.lcs.map(l=>`<option value="${l.code}" ${l.code===ep.lc?"selected":""}>${l.code} ${l.name}</option>`).join("");
+      const bg = el("div","modal-bg");
+      bg.innerHTML = `<div class="modal"><div class="modal-h"><h3>EPを編集</h3><span class="x">×</span></div>
+        <div class="modal-b"><div class="frm">
+          <div class="full"><label>氏名</label><input id="e_name" value="${(ep.name||'').replace(/"/g,'&quot;')}"></div>
+          <div><label>大学・学年</label><input id="e_univ" value="${(ep.univ||'').replace(/"/g,'&quot;')}"></div>
+          <div><label>LC</label><select id="e_lc">${lcOpts}</select></div>
+          <div><label>De担</label><input id="e_de" value="${(ep.de_tan||'').replace(/"/g,'&quot;')}"></div>
+          <div><label>EPM</label><input id="e_epm" value="${(ep.epm||'').replace(/"/g,'&quot;')}"></div>
+        </div>
+        <div class="frm-actions"><button class="btn" id="e_cancel">キャンセル</button><button class="addbtn" id="e_save">保存</button></div>
+        </div></div>`;
+      document.body.appendChild(bg);
+      const close=()=>bg.remove();
+      bg.querySelector(".x").onclick=close; bg.querySelector("#e_cancel").onclick=close;
+      bg.onclick=e=>{ if(e.target===bg) close(); };
+      bg.querySelector("#e_save").onclick=async()=>{
+        await API.updateEp(id,{ name:$("#e_name").value.trim(), univ:$("#e_univ").value.trim(),
+          lc:$("#e_lc").value, de_tan:$("#e_de").value.trim(), epm:$("#e_epm").value.trim() });
+        close(); await load(); toast("保存しました");
+      };
+    };
     $$(".tab").forEach(b=>b.onclick=()=>{ activeTab=b.dataset.tab; render(); });
     renderTab();
   }

@@ -47,6 +47,62 @@ const epDocsLite = epId => q(`SELECT d.name, COALESCE(x.status,'未提出') stat
 const epAuditLite = epId => q(`SELECT a.indicator, a.pass, COALESCE(x.result,'未判定') result
   FROM audit_item a LEFT JOIN ep_audit x ON x.audit_id=a.id AND x.ep_id=? ORDER BY a.id`, epId);
 
+// ---- bucket / phase 自動化ヘルパー ----
+const bucketCompletedFor = (bucket, phase) =>
+  PHASE_ORDER.indexOf(phase) >= PHASE_ORDER.indexOf(D.BUCKET_MILESTONE[bucket]);
+const bucketIsCurrent = (bucket, phase) =>
+  PHASE_ORDER.indexOf(phase) < PHASE_ORDER.indexOf(D.BUCKET_MILESTONE[bucket]);
+
+// 新規EPの子行（タスク/提出物/といちらん/資格審査）をフェーズから生成
+async function initEpChildren(epId, phase) {
+  const tpl = await q("SELECT id,bucket FROM op_template");
+  for (const t of tpl) {
+    const status = (bucketCompletedFor(t.bucket, phase) && !bucketIsCurrent(t.bucket, phase)) ? "完了" : "未";
+    await run(`INSERT INTO ep_task(ep_id,task_id,status,done_at) VALUES(?,?,?,?)
+               ON CONFLICT (ep_id,task_id) DO NOTHING`, epId, t.id, status, status === "完了" ? "—" : null);
+  }
+  for (const d of await q("SELECT id,phase FROM doc_template")) {
+    let st = "未提出", dc = 0;
+    if (bucketCompletedFor(d.phase, phase) && !bucketIsCurrent(d.phase, phase)) { st = "受領"; dc = 1; }
+    await run(`INSERT INTO ep_doc(ep_id,doc_id,status,double_checked) VALUES(?,?,?,?)
+               ON CONFLICT (ep_id,doc_id) DO NOTHING`, epId, d.id, st, dc);
+  }
+  for (const f of await q("SELECT key FROM toi_field"))
+    await run(`INSERT INTO ep_toi(ep_id,field_key,value,double_checked) VALUES(?,?,?,?)
+               ON CONFLICT (ep_id,field_key) DO NOTHING`, epId, f.key, "", 0);
+  for (const a of await q("SELECT id FROM audit_item"))
+    await run(`INSERT INTO ep_audit(ep_id,audit_id,result) VALUES(?,?,?)
+               ON CONFLICT (ep_id,audit_id) DO NOTHING`, epId, a.id, "未判定");
+}
+
+// 次のEP ID（ep-001形式の最大+1）
+async function nextEpId() {
+  const rows = await q("SELECT id FROM eps WHERE id ~ '^ep-[0-9]+$'");
+  let max = 0;
+  rows.forEach(r => { const n = parseInt(r.id.slice(3), 10); if (n > max) max = n; });
+  return "ep-" + String(max + 1).padStart(3, "0");
+}
+
+// フェーズ自動進行：bucketが順に全完了したら、到達マイルストーンまで前進（前進のみ）
+async function autoAdvance(epId) {
+  const e = await q1("SELECT phase FROM eps WHERE id=?", epId);
+  if (!e) return null;
+  const st = await epTaskStatus(epId);
+  const tpl = await q("SELECT id,bucket FROM op_template");
+  let reached = e.phase, prevAllDone = true;
+  for (const [bid] of D.BUCKETS) {
+    const tasks = tpl.filter(t => t.bucket === bid);
+    const done = tasks.length > 0 && tasks.every(t => st[t.id] === "完了");
+    if (prevAllDone && done) reached = D.BUCKET_MILESTONE[bid];
+    else prevAllDone = false;
+  }
+  if (PHASE_ORDER.indexOf(reached) > PHASE_ORDER.indexOf(e.phase)) {
+    await run("UPDATE eps SET phase=? WHERE id=?", reached, epId);
+    return reached;
+  }
+  return e.phase;
+}
+
 // ---- meta ----
 app.get("/api/meta", h(async (_req, res) => {
   res.json({ term: "26.27", lcs: await q("SELECT * FROM lcs ORDER BY code"),
@@ -130,7 +186,8 @@ app.patch("/api/eps/:id/tasks/:taskId", h(async (req, res) => {
   await run(`INSERT INTO ep_task(ep_id,task_id,status,done_at) VALUES(?,?,?,?)
        ON CONFLICT (ep_id,task_id) DO UPDATE SET status=excluded.status, done_at=excluded.done_at`,
     req.params.id, req.params.taskId, status, status === "完了" ? today() : null);
-  res.json({ ok: true });
+  const phase = await autoAdvance(req.params.id);   // bucket全完了で自動進行
+  res.json({ ok: true, phase });
 }));
 
 app.patch("/api/eps/:id/docs/:docId", h(async (req, res) => {
@@ -246,6 +303,80 @@ app.post("/api/copilot", h(async (req, res) => {
     catch (err) { aiError = String(err.message || err); }
   }
   res.json({ ai: ai.enabled(), aiText, aiError, rules });
+}));
+
+// ---- EP CRUD ----
+app.post("/api/eps", h(async (req, res) => {
+  const b = req.body || {};
+  if (!b.name) return res.status(400).json({ error: "name required" });
+  const id = b.id || await nextEpId();
+  const phase = b.phase || "signup";
+  await run(`INSERT INTO eps(id,name,univ,lc,phase,op_id,de_tan,epm,applied,lk,departure_date,return_date)
+             VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
+    id, b.name, b.univ || null, b.lc || null, phase, b.op_id || null,
+    b.de_tan || null, b.epm || null, b.applied || today(), b.lk || 3,
+    b.departure_date || null, b.return_date || null);
+  await initEpChildren(id, phase);
+  res.json({ ok: true, id });
+}));
+
+app.patch("/api/eps/:id", h(async (req, res) => {
+  const fields = ["name","univ","lc","de_tan","epm","phase","op_id","lk","departure_date","return_date"];
+  const sets = [], vals = [];
+  for (const f of fields) if (f in (req.body || {})) { sets.push(`${f}=?`); vals.push(req.body[f]); }
+  if (!sets.length) return res.json({ ok: true });
+  vals.push(req.params.id);
+  await run(`UPDATE eps SET ${sets.join(",")} WHERE id=?`, ...vals);
+  res.json({ ok: true });
+}));
+
+app.delete("/api/eps/:id", h(async (req, res) => {
+  const id = req.params.id;
+  for (const t of ["ep_audit","ep_toi","ep_doc","ep_task","messages","checkins"])
+    await run(`DELETE FROM ${t} WHERE ep_id=?`, id);
+  await run("DELETE FROM eps WHERE id=?", id);
+  res.json({ ok: true });
+}));
+
+// ---- OP CRUD ----
+app.post("/api/ops", h(async (req, res) => {
+  const b = req.body || {};
+  if (!b.country && !b.project) return res.status(400).json({ error: "country/project required" });
+  const id = b.id || ("op-" + Date.now().toString(36));
+  await run(`INSERT INTO ops(id,flag,country,project,org,slots,region,sdg,dl) VALUES(?,?,?,?,?,?,?,?,?)`,
+    id, b.flag || "🌐", b.country || "", b.project || "", b.org || "", b.slots || 1, b.region || "asia", b.sdg || "", b.dl || "");
+  res.json({ ok: true, id });
+}));
+
+app.delete("/api/ops/:id", h(async (req, res) => {
+  await run("UPDATE eps SET op_id=NULL WHERE op_id=?", req.params.id);  // 参照を外す
+  await run("DELETE FROM ops WHERE id=?", req.params.id);
+  res.json({ ok: true });
+}));
+
+// ---- 今日やること（全EP横断キュー） ----
+app.get("/api/today", h(async (_req, res) => {
+  const eps = await q("SELECT * FROM eps ORDER BY id");
+  const actions = [];
+  for (const e of eps) {
+    const r = nextActions(e, await epTaskStatus(e.id), await epToiStats(e.id), await epDocsLite(e.id), await epAuditLite(e.id));
+    r.actions.filter(a => a.level === "urgent" || a.level === "soon")
+      .forEach(a => actions.push({ epId: e.id, epName: e.name, lc: e.lc, level: a.level, text: a.text }));
+  }
+  const rank = { urgent: 0, soon: 1 };
+  actions.sort((a, b) => (rank[a.level] ?? 9) - (rank[b.level] ?? 9));
+
+  // ダブルチェック待ち（受領済/記入済だが未ダブチ）
+  const doubleChecks = await q(`
+    SELECT e.id "epId", e.name "epName", e.lc, 'doc' kind, d.name label, x.doc_id ref
+    FROM ep_doc x JOIN eps e ON e.id=x.ep_id JOIN doc_template d ON d.id=x.doc_id
+    WHERE x.status='受領' AND x.double_checked=0
+    UNION ALL
+    SELECT e.id, e.name, e.lc, 'toi', f.label, x.field_key
+    FROM ep_toi x JOIN eps e ON e.id=x.ep_id JOIN toi_field f ON f.key=x.field_key
+    WHERE x.value<>'' AND x.double_checked=0
+    ORDER BY 2`);
+  res.json({ actions, doubleChecks });
 }));
 
 // ---- static frontend ----

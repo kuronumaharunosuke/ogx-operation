@@ -10,7 +10,7 @@
 <script>
 (async () => {
   const v = await mountShell({active:"ep"});
-  const eps = await API.eps();
+  let eps = await API.eps();
   v.innerHTML = `
     <div class="block"><div class="eyebrow">Layer 02 / oGV · EP Management</div>
       <div class="sec-title">渡航者 (EP) 管理</div>
@@ -20,6 +20,7 @@
         <input id="q" placeholder="氏名・LC・渡航先で検索…"></div>
       <button class="chip on" data-ph="all">すべて</button>
       ${LIFECYCLE.map(p=>`<button class="chip" data-ph="${p}">${PHASE_LABEL[p][0]}</button>`).join("")}
+      <button class="addbtn" id="addEp" style="margin-left:auto">＋ 新規EP</button>
     </div>
     <table class="tbl"><thead><tr><th>EP</th><th>LC</th><th>渡航先 / OP</th><th>De担 / EPM</th><th>フェーズ</th><th>運用進捗</th></tr></thead>
     <tbody id="rows"></tbody></table>`;
@@ -45,5 +46,40 @@
   $("#q").oninput=render;
   $$('.chip').forEach(c=>c.onclick=()=>{$$('.chip').forEach(x=>x.classList.remove("on"));c.classList.add("on");curPh=c.dataset.ph;render();});
   render();
+
+  async function reload(){ eps = await API.eps(); render(); }
+
+  $("#addEp").onclick = () => {
+    const lcOpts = META.lcs.map(l=>`<option value="${l.code}">${l.code} ${l.name}</option>`).join("");
+    const phOpts = LIFECYCLE.map(p=>`<option value="${p}">${PHASE_LABEL[p][0]}</option>`).join("");
+    const bg = el("div","modal-bg");
+    bg.innerHTML = `<div class="modal"><div class="modal-h"><h3>新規EPを追加</h3><span class="x">×</span></div>
+      <div class="modal-b"><div class="frm">
+        <div class="full"><label>氏名 *</label><input id="f_name" placeholder="山田 太郎"></div>
+        <div><label>大学・学年</label><input id="f_univ" placeholder="一橋大 1年"></div>
+        <div><label>LC</label><select id="f_lc">${lcOpts}</select></div>
+        <div><label>De担</label><input id="f_de" placeholder="運営 太郎"></div>
+        <div><label>EPM</label><input id="f_epm" placeholder="—"></div>
+        <div><label>フェーズ</label><select id="f_phase">${phOpts}</select></div>
+        <div><label>出発日</label><input id="f_dep" type="date"></div>
+        <div><label>帰国日</label><input id="f_ret" type="date"></div>
+      </div>
+      <div class="frm-actions"><button class="btn" id="f_cancel">キャンセル</button><button class="addbtn" id="f_save">作成</button></div>
+      </div></div>`;
+    document.body.appendChild(bg);
+    const close = () => bg.remove();
+    bg.querySelector(".x").onclick = close; bg.querySelector("#f_cancel").onclick = close;
+    bg.onclick = e => { if(e.target===bg) close(); };
+    bg.querySelector("#f_save").onclick = async () => {
+      const name = $("#f_name").value.trim();
+      if(!name){ $("#f_name").focus(); return; }
+      await API.createEp({
+        name, univ:$("#f_univ").value.trim(), lc:$("#f_lc").value,
+        de_tan:$("#f_de").value.trim(), epm:$("#f_epm").value.trim(),
+        phase:$("#f_phase").value, departure_date:$("#f_dep").value||null, return_date:$("#f_ret").value||null,
+      });
+      close(); toast("EPを追加しました"); reload();
+    };
+  };
 })();
 </script></body></html>

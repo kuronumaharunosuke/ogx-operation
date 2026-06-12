@@ -29,6 +29,13 @@ const API = {
   trouble(){ return jget(`/api/trouble`); },
   copilotStatus(){ return jget(`/api/copilot/status`); },
   copilot(epId,question){ return jsend(`/api/copilot`,"POST",{epId,question}); },
+  // CRUD & 今日やること
+  createEp(data){ return jsend(`/api/eps`,"POST",data); },
+  updateEp(id,data){ return jsend(`/api/eps/${id}`,"PATCH",data); },
+  deleteEp(id){ return jsend(`/api/eps/${id}`,"DELETE"); },
+  createOp(data){ return jsend(`/api/ops`,"POST",data); },
+  deleteOp(id){ return jsend(`/api/ops/${id}`,"DELETE"); },
+  today(){ return jget(`/api/today`); },
 };
 
 /* phase / lifecycle 定数（バックエンドと一致） */

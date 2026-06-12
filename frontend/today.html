@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ja"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BLISS — 今日やること</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,400;0,700;0,900;1,400&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css"></head>
+<body><div class="shell" id="app"></div>
+<script src="api.js"></script><script src="app.js"></script>
+<script>
+(async () => {
+  const v = await mountShell({active:"today"});
+  v.innerHTML = `<div id="body" style="color:var(--ink-mute);font-size:13px">集計中…</div>`;
+  const lvlJp = {urgent:"至急", soon:"間近"};
+
+  async function load(){
+    const d = await API.today();
+    const body = $("#body");
+    body.innerHTML = `
+      <div class="block">
+        <div class="eyebrow">Operation Queue / 属人化を消す</div>
+        <div class="sec-title">今日やること（全EP横断）</div>
+        <p class="sec-note">担当に関係なく、上から順に処理すればオペレーションが回ります。誰が見ても「次の一手」が同じになる＝De担に依存しない状態。</p>
+      </div>
+
+      <div class="q-sec">
+        <div class="q-head"><h2>要対応</h2><span class="cnt ${d.actions.length?'':'zero'}">${d.actions.length}</span></div>
+        ${d.actions.length ? d.actions.map(a=>`
+          <div class="qrow">
+            <span class="lvl ${a.level==='urgent'?'lvl':''}" style="background:${a.level==='urgent'?'var(--seal)':'var(--orange)'};color:#fff">${lvlJp[a.level]||a.level}</span>
+            <div class="who"><b>${a.epName}</b><em>${a.lc||''}</em></div>
+            <div class="txt">${a.text}</div>
+            <a class="go" href="ep.html?id=${a.epId}">開く →</a>
+          </div>`).join("") : `<div class="q-empty">期限超過・直近の要対応はありません 🎉</div>`}
+      </div>
+
+      <div class="q-sec">
+        <div class="q-head"><h2>ダブルチェック待ち</h2><span class="cnt ${d.doubleChecks.length?'soft':'zero'}">${d.doubleChecks.length}</span></div>
+        ${d.doubleChecks.length ? d.doubleChecks.map((c,i)=>`
+          <div class="qrow" data-dc="${i}">
+            <span class="lvl" style="background:${c.kind==='doc'?'var(--aiesec-tint)':'var(--paper-deep)'};color:var(--ink-soft)">${c.kind==='doc'?'提出物':'といちらん'}</span>
+            <div class="who"><b>${c.epName}</b><em>${c.lc||''}</em></div>
+            <div class="txt">${c.label}</div>
+            <button class="tog" data-go>✓ ダブチ完了</button>
+          </div>`).join("") : `<div class="q-empty">ダブルチェック待ちはありません</div>`}
+      </div>`;
+
+    $$('[data-dc]').forEach(row=>{
+      const c = d.doubleChecks[+row.dataset.dc];
+      row.querySelector('[data-go]').onclick = async () => {
+        if (c.kind === 'doc') await API.setDoc(c.epId, c.ref, {doubleChecked:1});
+        else await API.setToi(c.epId, c.ref, {doubleChecked:1});
+        toast("ダブルチェック完了"); load();
+      };
+    });
+  }
+  await load();
+})();
+</script></body></html>

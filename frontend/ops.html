@@ -10,7 +10,7 @@
 <script>
 (async () => {
   const v = await mountShell({active:"op"});
-  const ops = await API.ops();
+  let ops = await API.ops();
   v.innerHTML = `
     <div class="block"><div class="eyebrow">Layer 02 / Opportunity</div>
       <div class="sec-title">OP 検索</div>
@@ -23,6 +23,7 @@
       <button class="chip" data-rg="africa">アフリカ</button>
       <button class="chip" data-rg="latam">中南米</button>
       <button class="chip" data-rg="europe">欧州</button>
+      <button class="addbtn" id="addOp" style="margin-left:auto">＋ OP追加</button>
     </div>
     <div class="op-grid" id="grid"></div>`;
   let rg="all";
@@ -30,6 +31,7 @@
     const qs=$("#q").value.toLowerCase();
     $("#grid").innerHTML = ops.filter(o=>(rg==="all"||o.region===rg)&&((o.country+o.project+o.org).toLowerCase().includes(qs)))
       .map(o=>`<div class="op">
+        <button class="del" data-del="${o.id}" title="削除">×</button>
         <div class="op-top"><span class="op-flag">${o.flag}</span><div class="op-slots">空き<b>${o.slots}</b>枠</div></div>
         <div class="op-b"><div class="op-role">${o.project}</div><div class="op-org">${o.country} · ${o.org}</div>
           <div class="op-tags"><span class="op-tag">${o.sdg}</span><span class="op-tag">${o.region}</span></div></div>
@@ -39,5 +41,43 @@
   $("#q").oninput=render;
   $$('.chip').forEach(c=>c.onclick=()=>{$$('.chip').forEach(x=>x.classList.remove("on"));c.classList.add("on");rg=c.dataset.rg;render();});
   render();
+
+  async function reload(){ ops = await API.ops(); render(); bindDel(); }
+  function bindDel(){
+    $$('[data-del]').forEach(b=>b.onclick=async(e)=>{
+      e.stopPropagation();
+      if(!confirm("このOPを削除しますか？（マッチ済EPは未マッチに戻ります）")) return;
+      await API.deleteOp(b.dataset.del); toast("OPを削除しました"); reload();
+    });
+  }
+  $("#addOp").onclick=()=>{
+    const bg=el("div","modal-bg");
+    bg.innerHTML=`<div class="modal"><div class="modal-h"><h3>OPを追加</h3><span class="x">×</span></div>
+      <div class="modal-b"><div class="frm">
+        <div><label>国旗(絵文字)</label><input id="o_flag" placeholder="🇹🇭"></div>
+        <div><label>国</label><input id="o_country" placeholder="Thailand"></div>
+        <div class="full"><label>プロジェクト名</label><input id="o_project" placeholder="happy bus"></div>
+        <div class="full"><label>受入LC</label><input id="o_org" placeholder="AIESEC in Bangkok"></div>
+        <div><label>枠数</label><input id="o_slots" type="number" value="3"></div>
+        <div><label>地域</label><select id="o_region"><option value="asia">アジア</option><option value="africa">アフリカ</option><option value="latam">中南米</option><option value="europe">欧州</option></select></div>
+        <div><label>SDG</label><input id="o_sdg" placeholder="SDG4"></div>
+        <div><label>締切</label><input id="o_dl" placeholder="08.20"></div>
+      </div>
+      <div class="frm-actions"><button class="btn" id="o_cancel">キャンセル</button><button class="addbtn" id="o_save">作成</button></div>
+      </div></div>`;
+    document.body.appendChild(bg);
+    const close=()=>bg.remove();
+    bg.querySelector(".x").onclick=close; bg.querySelector("#o_cancel").onclick=close;
+    bg.onclick=e=>{ if(e.target===bg) close(); };
+    bg.querySelector("#o_save").onclick=async()=>{
+      const country=$("#o_country").value.trim(), project=$("#o_project").value.trim();
+      if(!country&&!project){ $("#o_country").focus(); return; }
+      await API.createOp({ flag:$("#o_flag").value.trim()||"🌐", country, project,
+        org:$("#o_org").value.trim(), slots:+$("#o_slots").value||1, region:$("#o_region").value,
+        sdg:$("#o_sdg").value.trim(), dl:$("#o_dl").value.trim() });
+      close(); toast("OPを追加しました"); reload();
+    };
+  };
+  bindDel();
 })();
 </script></body></html>

@@ -5,6 +5,7 @@ const el = (t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=
 
 const NAV = [
   ["dash","index.html","指標","<rect x='3' y='3' width='7' height='9'/><rect x='14' y='3' width='7' height='5'/><rect x='14' y='12' width='7' height='9'/><rect x='3' y='16' width='7' height='5'/>"],
+  ["today","today.html","今日","<rect x='3' y='4' width='18' height='18' rx='2'/><path d='M16 2v4M8 2v4M3 10h18'/><path d='M9 16l2 2 4-4'/>"],
   ["recruit","recruit.html","新歓","<path d='M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2'/><circle cx='9' cy='7' r='4'/><path d='M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75'/>"],
   ["ep","eps.html","渡航","<path d='M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z'/><path d='M3.27 6.96L12 12.01l8.73-5.05M12 22.08V12'/>"],
   ["match","matching.html","適合","<path d='M16 3h5v5'/><path d='M8 21H3v-5'/><path d='M21 3l-7 7'/><path d='M3 21l7-7'/>"],
