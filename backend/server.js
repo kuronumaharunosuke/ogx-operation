@@ -120,7 +120,7 @@ app.get("/api/dashboard", h(async (_req, res) => {
   res.json({
     kpis: { cvr: 32.4, leads: 4182, su: 302, raise: 13, ops: (await q1("SELECT COUNT(*)::int c FROM ops")).c, lcs: 24 },
     phaseCounts, nationalFunnel,
-    lcRank: [["慶應","KO",41.2],["一橋","HI",39.8],["名古屋","NZ",37.1],["早稲田","WA",35.6],["京都","KT",34.0],["大阪","OS",31.5],["関学","KG",29.9]],
+    lcRank: [["慶應","KO",41.2],["一橋","HI",39.8],["名古屋","NA",37.1],["早稲田","WA",35.6],["京都","KT",34.0],["大阪","OS",31.5],["関学","KG",29.9]],
   });
 }));
 
@@ -390,6 +390,10 @@ const PORT = process.env.PORT || 3000;
 (async () => {
   try {
     await init();
+    // LC名は毎回正規化（既存DBでもEPを消さずに名称だけ更新）
+    for (const [code, name] of D.LCS)
+      await run(`INSERT INTO lcs(code,name) VALUES(?,?)
+                 ON CONFLICT (code) DO UPDATE SET name=excluded.name`, code, name);
     const n = (await query("SELECT COUNT(*)::int c FROM eps")).rows[0].c;
     if (n === 0) {
       const { runSeed } = require("./seed");
