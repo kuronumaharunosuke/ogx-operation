@@ -218,46 +218,62 @@
   }
 
   async function renderTimeline(t){
-    // 研修初日 → 研修最終日/出発/帰国
-    const td = s => {
-      if(!s) return null;
-      const [y,m,d]=s.split("-").map(Number);
-      const S=new Date(Date.UTC(y,m-1,d)), add=(dt,n)=>{const x=new Date(dt);x.setUTCDate(x.getUTCDate()+n);return x;}, f=x=>x.toISOString().slice(0,10);
+    const p = s => { const [y,m,d]=s.split("-").map(Number); return new Date(Date.UTC(y,m-1,d)); };
+    const add = (dt,n) => { const x=new Date(dt); x.setUTCDate(x.getUTCDate()+n); return x; };
+    const f = x => x.toISOString().slice(0,10);
+    // どれか1つの日付から、研修初日・研修最終日・出発・帰国 を全部算出
+    // 研修初日S：出発=S-2, 研修最終日=S+41(42日間), 帰国=S+42
+    const linkFrom = (kind, v) => {
+      if(!v) return null;
+      let S;
+      if(kind==="start") S=p(v);
+      else if(kind==="dep") S=add(p(v),2);
+      else if(kind==="ret") S=add(p(v),-42);
+      else return null;
       const end=add(S,41);
-      return {start:f(S), end:f(end), dep:f(add(S,-2)), ret:f(add(end,1))};
+      return { start:f(S), end:f(end), dep:f(add(S,-2)), ret:f(add(end,1)) };
     };
     const autoNote = o => `研修 ${o.start}〜${o.end}（42日間）｜出発 ${o.dep}・帰国 ${o.ret}`;
-    // 出発日が入っていれば研修初日=出発+2 を逆算してプリフィル
-    let pre="";
-    if(ep.departure_date){ const [y,m,d]=ep.departure_date.split("-").map(Number); const dt=new Date(Date.UTC(y,m-1,d)); dt.setUTCDate(dt.getUTCDate()+2); pre=dt.toISOString().slice(0,10); }
 
-    t.innerHTML = `<p class="hint">研修初日を入れると、<b>研修42日間</b>／<b>出発＝研修2日前</b>／<b>帰国＝研修最終日翌日</b>を自動計算し、全工程の期限を逆算します。</p>
-      <div class="dateset" style="flex-wrap:wrap;gap:18px">
-        <div><label>研修初日</label><input type="date" id="tstart" value="${pre}"></div>
-        <div id="derived" style="font-size:12.5px;color:var(--ink-soft);align-self:flex-end;padding-bottom:8px"></div>
-        <button class="btn pri sm" id="recalc" style="align-self:flex-end">設定して逆算</button>
+    const preStart = ep.departure_date ? f(add(p(ep.departure_date),2)) : "";
+    t.innerHTML = `<p class="hint"><b>研修初日・出発日・帰国日のどれか1つ</b>入れれば、残りも自動で埋まり全工程の期限が出ます（研修42日間／出発=研修2日前／帰国=研修最終日翌日）。</p>
+      <div class="dateset" style="flex-wrap:wrap;gap:16px">
+        <div><label>研修初日</label><input type="date" id="tstart" value="${preStart}"></div>
+        <div><label>出発日</label><input type="date" id="tdep" value="${ep.departure_date||""}"></div>
+        <div><label>帰国日</label><input type="date" id="tret" value="${ep.return_date||""}"></div>
+        <button class="btn pri sm" id="recalc" style="align-self:flex-end">再計算</button>
       </div>
+      <div id="derived" style="font-size:12.5px;color:var(--ink-soft);margin:-8px 0 14px"></div>
       <div style="margin-bottom:18px"><label style="font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-mute);font-weight:500;display:block;margin-bottom:5px">備考</label>
         <textarea id="note" rows="2" style="width:100%;border:1px solid var(--rule-2);background:var(--paper-raised);padding:9px 11px;font-size:13px;border-radius:var(--r-sm);resize:vertical;font-family:var(--f-body)">${(ep.note||"").replace(/</g,"&lt;")}</textarea></div>
       <div id="tlbody" style="font-size:12px;color:var(--ink-mute)">読み込み中…</div>`;
 
-    let lastAuto = ep.note || "";
-    function preview(){
-      const o=td($("#tstart").value);
-      if(!o){ $("#derived").innerHTML=""; return; }
+    let lastAuto = ep.note || "", curStart = preStart || null, timer = null;
+
+    function fillFrom(kind, v){
+      const o = linkFrom(kind, v);
+      if(!o){ curStart=null; $("#derived").innerHTML=""; return; }
+      curStart = o.start;
+      $("#tstart").value=o.start; $("#tdep").value=o.dep; $("#tret").value=o.ret;
       $("#derived").innerHTML=`研修 <b>${o.start}〜${o.end}</b>（42日）／出発 <b>${o.dep}</b>・帰国 <b>${o.ret}</b>`;
       const note=$("#note");
       if(!note.value || note.value===lastAuto){ note.value=autoNote(o); lastAuto=note.value; }
     }
-    $("#tstart").oninput=preview; preview();
+    async function commit(){
+      if(!curStart){ drawTl(); return; }
+      await API.setSchedule(id, { training_start:curStart, note:$("#note").value||null });
+      const o=linkFrom("start",curStart);
+      ep.departure_date=o.dep; ep.return_date=o.ret; ep.note=$("#note").value||null;
+      drawTl();
+    }
+    // どれか入力 → 全部埋める → 少し待って自動で逆算表示
+    const onInput = kind => e => { fillFrom(kind, e.target.value); clearTimeout(timer); timer=setTimeout(commit, 350); };
+    $("#tstart").oninput=onInput("start");
+    $("#tdep").oninput=onInput("dep");
+    $("#tret").oninput=onInput("ret");
+    $("#recalc").onclick=()=>{ clearTimeout(timer); commit(); toast("逆算しました"); };
 
-    $("#recalc").onclick=async()=>{
-      const s=$("#tstart").value||null;
-      await API.setSchedule(id, { training_start:s, note:$("#note").value||null });
-      const o=s?td(s):null;
-      ep.departure_date=o?o.dep:ep.departure_date; ep.return_date=o?o.ret:ep.return_date; ep.note=$("#note").value||null;
-      toast("研修日程を設定しました"); drawTl();
-    };
+    if(preStart) fillFrom("start", preStart);
     drawTl();
     async function drawTl(){
       const tl = await API.timeline(id);

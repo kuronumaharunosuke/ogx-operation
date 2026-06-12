@@ -62,7 +62,9 @@
         <div><label>EPM</label><input id="f_epm" placeholder="—"></div>
         <div><label>フェーズ</label><select id="f_phase">${phOpts}</select></div>
         <div><label>研修初日</label><input id="f_tstart" type="date"></div>
-        <div class="full"><label>備考（研修日程は自動で入ります）</label><input id="f_note" placeholder="研修初日を入れると自動生成"></div>
+        <div><label>出発日</label><input id="f_dep" type="date"></div>
+        <div><label>帰国日</label><input id="f_ret" type="date"></div>
+        <div class="full"><label>備考（研修日程は自動で入ります）</label><input id="f_note" placeholder="研修初日/出発日/帰国日のどれかを入れると自動"></div>
       </div>
       <div class="frm-actions"><button class="btn" id="f_cancel">キャンセル</button><button class="addbtn" id="f_save">作成</button></div>
       </div></div>`;
@@ -71,14 +73,19 @@
     bg.querySelector(".x").onclick = close; bg.querySelector("#f_cancel").onclick = close;
     bg.onclick = e => { if(e.target===bg) close(); };
     let lastAuto="";
-    bg.querySelector("#f_tstart").oninput = e => {
-      const s=e.target.value; const note=bg.querySelector("#f_note");
-      if(!s) return;
-      const [y,m,d]=s.split("-").map(Number); const S=new Date(Date.UTC(y,m-1,d));
+    const linkNew = (kind, v) => {
+      if(!v) return;
+      const p=s=>{const[y,m,d]=s.split("-").map(Number);return new Date(Date.UTC(y,m-1,d));};
       const add=(dt,n)=>{const x=new Date(dt);x.setUTCDate(x.getUTCDate()+n);return x;}, f=x=>x.toISOString().slice(0,10);
-      const end=add(S,41), auto=`研修 ${f(S)}〜${f(end)}（42日間）｜出発 ${f(add(S,-2))}・帰国 ${f(add(end,1))}`;
+      let S; if(kind==="start")S=p(v); else if(kind==="dep")S=add(p(v),2); else S=add(p(v),-42);
+      const end=add(S,41), o={start:f(S),end:f(end),dep:f(add(S,-2)),ret:f(add(end,1))};
+      bg.querySelector("#f_tstart").value=o.start; bg.querySelector("#f_dep").value=o.dep; bg.querySelector("#f_ret").value=o.ret;
+      const note=bg.querySelector("#f_note"), auto=`研修 ${o.start}〜${o.end}（42日間）｜出発 ${o.dep}・帰国 ${o.ret}`;
       if(!note.value||note.value===lastAuto){ note.value=auto; lastAuto=auto; }
     };
+    bg.querySelector("#f_tstart").oninput = e => linkNew("start", e.target.value);
+    bg.querySelector("#f_dep").oninput = e => linkNew("dep", e.target.value);
+    bg.querySelector("#f_ret").oninput = e => linkNew("ret", e.target.value);
     bg.querySelector("#f_save").onclick = async () => {
       const name = $("#f_name").value.trim();
       if(!name){ $("#f_name").focus(); return; }
