@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "commonjs",
+  "engines": {
+    "node": ">=22.5.0"
+  },
   "scripts": {
     "start": "node --experimental-sqlite server.js",
     "seed": "node --experimental-sqlite seed.js --reset"

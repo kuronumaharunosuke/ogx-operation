@@ -252,4 +252,15 @@ app.get("/", (_req, res) => res.sendFile(path.join(__dirname, "..", "frontend", 
 app.get("*", (_req, res) => res.sendFile(path.join(__dirname, "..", "frontend", "login.html")));
 
 const PORT = process.env.PORT || 3000;
+
+// 初回起動（DBが空）なら自動でシード投入 — デプロイ先でそのまま動くように
+try {
+  const n = db.prepare("SELECT COUNT(*) c FROM eps").get().c;
+  if (n === 0) {
+    const { runSeed } = require("./seed");
+    const r = runSeed(false);
+    console.log("DBが空だったので初期データを投入:", r.eps, "EPs");
+  }
+} catch (e) { console.error("auto-seed skipped:", e.message); }
+
 app.listen(PORT, () => console.log(`BLISS → http://localhost:${PORT}`));
